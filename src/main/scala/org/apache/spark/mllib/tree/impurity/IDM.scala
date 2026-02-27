@@ -11,10 +11,8 @@ import org.apache.spark.annotation.Since
 @Since("1.0.0")
 object IDM extends Impurity {
 
-  //private val _log2 = scala.math.log(2)
 
-  //private[cdt] def log2(x: Double) = scala.math.log(x) / _log2
-
+  /*------------------------------------------------------------------------*/
   /**
    * This private method searches for an element in a ordered integer vector.
    * @param element Int to look for
@@ -29,205 +27,6 @@ object IDM extends Impurity {
 
     i < size && vector(i) == element
   }
-
-  /**
-   * information calculation for multiclass classification
-   * @param counts Array[Double] with counts for each label
-   * @param totalCount sum of counts for all labels
-   * @return information value, or 0 if totalCount = 0
-   */
-  @Since("1.1.0")
-  /*override*/ def calculateVER0(counts: Array[Double], totalCount: Double): Double = {
-
-    if (totalCount == 0) {
-      return 0
-    }
-
-    // Used to store the index values of the elements with min freq
-    var minIndexes = new Array[Int](counts.length)
-    val s: Double = 1.0 // Hyperparameter
-    val total = totalCount + s
-    var minValue = total // value of min freq, initialized with a big value
-    val numClasses = counts.length
-    var impurity = 0.0
-    var j = 0 // minIndexes size
-
-    // Search for the min freq indexes
-    for(i <- 0 until numClasses) {
-      if ((counts(i)-minValue).abs <= 0.01) {
-        minIndexes(j) = i
-        j += 1
-        // DEBUG println(counts(i)+" is the same min, i="+i)
-      } else if (counts(i)<minValue) {
-        j = 1 // new min freq found
-        minValue = counts(i)
-        minIndexes(0) = i
-        // DEBUG println(counts(i)+" is a new min, i="+i)
-      } // DEBUG else println(counts(i)+" is greater than "+minValue+",i="+i)
-    }
-
-    /* DEBUG
-     for(i <- 0 until minIndexes.length) {
-     println(i+"'th element is: " + minIndexes(i));
-     }
-     for(i <- 0 until j) {
-     println(i+"'th element is: " + minIndexes2(i));
-     }
-      DEBUG */
-
-    var classIndex = 0
-    val adjust = s / j
-
-    while (classIndex < numClasses) {
-      val classCount = counts(classIndex)
-      // if (classCount != 0) { //it's not necessary here!
-      var freq = 0.0
-      if (minIndexes.indexOf(classIndex) != -1 ) {
-        // P* case, the class belongs to the min freq classes, only s=1
-        freq = ( classCount + adjust ) / total
-      } else {
-        // Normal P case
-        freq = classCount / total
-        // *DEBUG*/println("Class" + classIndex + "/" + numClasses +" P="+freq)
-      }
-      impurity -= freq * scala.math.log(freq) // log2(freq)
-      // }
-      classIndex += 1
-    }
-    impurity
-  }
-
- 
-  /**
-   * information calculation for multiclass classification
-   * @param counts Array[Double] with counts for each label
-   * @param totalCount sum of counts for all labels
-   * @return information value, or 0 if totalCount = 0
-   */
-  @Since("1.1.0")
-  /*override*/ def calculateVER3(counts: Array[Double], totalCount: Double): Double = {
-    val impurityO=calculate(counts, totalCount)
-    val impurityO2=calculateVER4(counts, totalCount)
-    
-    import java.util.concurrent.TimeUnit
-    var startNanoTime = System.nanoTime()
-    var impurity = 0.0
-    for (i <- 1 to 100000) { 
-
-    if (totalCount == 0) {
-      if (impurityO!= 0) {
-        println("ERROR: Impurity = "+0+" çImpurityOptimized="+impurityO)
-      }
-      return 0
-    }
-
-    val s: Double = 1.0 // Hyperparameter
-    
-
-    //Value with the minimum frequency
-    val min=counts.min
-    // Store the indexes of the elements with min freq
-    val minIndexes = counts.zipWithIndex.filter(pair => pair._1 == min).map(pair => pair._2)
-    val total = totalCount + s
-    val adjust = s / minIndexes.length
-    val numClasses = counts.length
-    var classIndex = 0
-    //var impurity = 0.0
-    impurity = 0.0
-    while (classIndex < numClasses) {
-      val classCount = counts(classIndex)
-      // if (classCount != 0) { //it's not necessary here!
-      var freq = 0.0
-      if (minIndexes.indexOf(classIndex) != -1 ) {
-        // P* case, the class belongs to the min freq classes, only s=1
-        freq = ( classCount + adjust ) / total
-      } else {
-        // Normal P case
-        freq = classCount / total
-        // *DEBUG*/println("Class" + classIndex + "/" + numClasses +" P="+freq)
-      }
-      impurity -= freq * scala.math.log(freq) // log2(freq)
-      // }
-      classIndex += 1
-    }
-
-     }
-    var endNanoTime = System.nanoTime()
-    val executionTime0 = TimeUnit.NANOSECONDS.toMillis(endNanoTime - startNanoTime)
-
-
-    if (impurityO!= impurity) {
-        println("ERROR: Impurity = "+impurity+" ImpurityOptimized1="+impurityO)
-    }
-    if (impurityO!= impurity) {
-        println("ERROR: Impurity = "+impurity+" ImpurityOptimized2="+impurityO)
-    }
-    import java.util.concurrent.TimeUnit
-    startNanoTime = System.nanoTime()
-    for (i <- 1 to 100000) { 
-      val feo =calculate(counts, totalCount)
-    }
-    endNanoTime = System.nanoTime()
-    val executionTime1 = TimeUnit.NANOSECONDS.toMillis(endNanoTime - startNanoTime)
-
-    startNanoTime = System.nanoTime()
-    for (i <- 1 to 100000) { 
-      val feo =calculateVER4(counts, totalCount)
-    }
-    endNanoTime = System.nanoTime()
-    val executionTime2 = TimeUnit.NANOSECONDS.toMillis(endNanoTime - startNanoTime)
-    println ("OLD0:"+executionTime0)
-    println ("OPt1:"+executionTime1)
-    println ("Opt2:"+executionTime2+"\n")
-    impurity
-  }
-/**
-   * information calculation for multiclass classification
-   * @param counts Array[Double] with counts for each label
-   * @param totalCount sum of counts for all labels
-   * @return information value, or 0 if totalCount = 0
-   */
-  @Since("1.1.0")
-  /*override*/ def calculateVER2(counts: Array[Double], totalCount: Double): Double = {
-    
-    if (totalCount == 0) {
-      return 0
-    }
-
-    val s: Double = 1.0 // Hyperparameter
-    
-
-    //Value with the minimum frequency
-    val min=counts.min
-    // Store the indexes of the elements with min freq
-    val minIndexes = counts.zipWithIndex.filter(pair => pair._1 == min).map(pair => pair._2)
-    val total = totalCount + s
-    val adjust = s / minIndexes.length
-    val numClasses = counts.length
-    var classIndex = 0
-    var impurity = 0.0
-    while (classIndex < numClasses) {
-      val classCount = counts(classIndex)
-      // if (classCount != 0) { //it's not necessary here!
-      var freq = 0.0
-      if (minIndexes.indexOf(classIndex) != -1 ) {
-        // P* case, the class belongs to the min freq classes, only s=1
-        freq = ( classCount + adjust ) / total
-      } else {
-        // Normal P case
-        freq = classCount / total
-        // *DEBUG*/println("Class" + classIndex + "/" + numClasses +" P="+freq)
-      }
-      impurity -= freq * scala.math.log(freq) // log2(freq)
-      // }
-      classIndex += 1
-    }
-    impurity
-  }
-
-
-
-
 
 /*------------------------------------------------------------------------*/
 /**
@@ -346,9 +145,6 @@ object IDM extends Impurity {
     else
       newCounts
   }
-
-
-
 
 /*------------------------------------------------------------------------*/
 

@@ -10,10 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 @Since("1.0.0")
 object EContamination extends Impurity {
 
-  private val _log2 = scala.math.log(2)
   private val MINDIFF = 0.00001
-
-  private[tree] def log2(x: Double) = scala.math.log(x) / _log2  
   
   /**
    * Information calculation for multiclass classification
@@ -52,8 +49,7 @@ object EContamination extends Impurity {
    */
   private def eContaminationTransformation(array: Array[Double], epsilon: Double): Array[Double] = {
     val sum = array.sum
-    //val invSum = 1.0 / sum //for efficiency, faster multiplication than division
-    val cfactor = (1.0 - epsilon)/sum // precompute constant factor
+    val cfactor = (1.0 - epsilon)/sum // precompute constant factor, for efficiency
 
     // Calculate probability intervals and only add valid indexes
     val pl = new Array[Double](array.length)
@@ -62,9 +58,6 @@ object EContamination extends Impurity {
     
     //Compute interval of the form [(1-\epsilon)p_i, (1-\epsilon)p_i + \epsilon]
     for (i <- 0 until array.length) {
-      //val p_i = array(i) * invSum
-      //val lower = math.max(0.0, (1 - epsilon) * p_i)
-      //val upper = math.min(1.0, (1 - epsilon) * p_i + epsilon)
       val lower = math.max(0.0, cfactor * array(i))
       val upper = math.min(1.0, lower + epsilon)
       pl(i) = lower
@@ -224,156 +217,6 @@ object EContamination extends Impurity {
     count
   }
 
-  /**
-   * This method computes the maximum entropy for intervals of probability 
-   * distributions. More info in:
-   *   Joaquin Abellan and Serafin Moral. 
-   *   Maximum of entropy for credal sets. 
-   *   Int. J. Uncertain. Fuzziness Knowl.-Based Syst. 11(5), 587-597, 2003.
-   *   doi: 10.1142/S021848850300234X 
-   * 
-   * @param pl array with the lower values of the probability intervals
-   * @param pu array with the upper values of the probability intervals
-   * @param indexes list of indexes to use
-   * @return array with the maximum entropy for each value
-   */
-  private def maxEntropyMAL(pl: Array[Double], pu: Array[Double], 
-                       indexes: ArrayBuffer[Int]): Array[Double] = {
-    var sumPl = pl.sum
-    var iteration = 0
-    val maxIterations = pl.length * 1000 // Safety limit
-  
-    // Iterative version to avoid recursion overhead
-    while (math.abs(1 - sumPl) >= 0.001 && indexes.nonEmpty) {
-      iteration += 1
-      
-      // Safety check for infinite loop
-      if (iteration > maxIterations) {
-        println(s"[WARNING] maxEntropy exceeded $maxIterations iterations. Stopping.")
-        println(s"  sumPl=$sumPl, indexes.size=${indexes.size}")
-        println(s"  pl=${pl.mkString("[", ", ", "]")}")
-        println(s"  pu=${pu.mkString("[", ", ", "]")}")
-        return pl
-      }
-      
-      if (iteration % 100 == 0) {
-        println(s"[DEBUG] Iteration $iteration: sumPl=$sumPl, activeIndexes=${indexes.size}")
-      }
-      
-      // Remove indexes where pl[i] has reached pu[i] (no room to increase)
-      var i = 0
-      while (i < indexes.length) {
-        val idx = indexes(i)
-        if (math.abs(pl(idx) - pu(idx)) < MINDIFF) {
-          indexes.remove(i)
-        } else {
-          i += 1
-        }
-      }
-      
-      // If no indexes left to adjust, we're done
-      if (indexes.isEmpty) {
-        println(s"[DEBUG] No more indexes to adjust at iteration $iteration, sumPl=$sumPl")
-        return pl
-      }
-      
-      // Find minimum value index, count, and the minimum value itself in one pass
-      val (men, nme, minVal) = findMinInfo(pl, indexes)
-      
-      // Find second minimum value index
-      val sig = sigIndexMAL(pl, minVal, indexes)
-      
-      // Calculate remaining mass and increment per minimum element
-      val remainingMass = 1.0 - sumPl
-      val incrementPerMin = remainingMass / nme
-      
-      // Increase probabilities for elements with minimum value
-      var totalIncrement = 0.0
-      for (i <- pl.indices) {
-        if (math.abs(pl(i) - minVal) < MINDIFF) {
-          val maxAllowedIncrease = pu(i) - pl(i)
-          val increment = if (sig >= 0) {
-            // There's a second minimum, so we can't go beyond it
-            math.min(math.min(maxAllowedIncrease, pl(sig) - minVal), incrementPerMin)
-          } else {
-            // All values are equal, so just respect upper bound and available mass
-            math.min(maxAllowedIncrease, incrementPerMin)
-          }
-          pl(i) += increment
-          totalIncrement += increment
-        }
-      }
-      
-      // Check if we made progress
-      if (totalIncrement < MINDIFF) {
-        println(s"[WARNING] No progress made at iteration $iteration")
-        println(s"  totalIncrement=$totalIncrement, remainingMass=$remainingMass")
-        println(s"  minVal=$minVal, nme=$nme, sig=$sig")
-        println(s"  indexes=${indexes.mkString("[", ", ", "]")}")
-        // Force exit to avoid infinite loop
-        return pl
-      }
-      
-      // Update sum incrementally instead of recalculating
-      sumPl += totalIncrement
-    }
-    
-    if (iteration > 10) {
-      println(s"[INFO] maxEntropy completed after $iteration iterations")
-    }
-    
-    pl
-  }
-  
-  /**
-   * Find the index of the minimum value, count how many have that value, 
-   * and return the minimum value itself. All in one pass for efficiency.
-   * 
-   * @param p array with values
-   * @param indexes list of indexes to consider
-   * @return tuple (index of minimum, count of minimums, minimum value)
-   */
-  private def findMinInfo(p: Array[Double], indexes: ArrayBuffer[Int]): (Int, Int, Double) = {
-    var minVal = Double.MaxValue
-    var minIdx = -1
-    var count = 0
-    
-    for (i <- indexes) {
-      if (p(i) < minVal) {
-        minVal = p(i)
-        minIdx = i
-        count = 1
-      } else if (math.abs(p(i) - minVal) < MINDIFF) {
-        count += 1
-      }
-    }
-    
-    (minIdx, count, minVal)
-  }
-  
-  /**
-   * Find the index of the second minimum value in the array p.
-   * Optimized version without temporary array allocation.
-   * 
-   * @param p array with values
-   * @param minVal the minimum value
-   * @param indexes list of indexes to consider
-   * @return index of the second minimum value, or -1 if all values are equal
-   */
-  private def sigIndexMAL(p: Array[Double], minVal: Double, 
-                       indexes: ArrayBuffer[Int]): Int = {
-    var secondMin = Double.MaxValue
-    var secondIdx = -1
-    
-    for (idx <- indexes) {
-      if (math.abs(p(idx) - minVal) >= MINDIFF && p(idx) < secondMin) {
-        secondMin = p(idx)
-        secondIdx = idx
-      }
-    }
-    
-    secondIdx
-  }
 
   /**
    * variance calculation
