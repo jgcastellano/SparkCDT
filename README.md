@@ -9,11 +9,13 @@ This repository implements three credal impurity criteria:
 2. **NPI** (Nonparametric Predictive Inference)
 3. **epsilon-Contamination** ($\epsilon$-Contamination)
 
-## 📖 Citation
+## Citation
 
 This implementation was developed for the following research paper. If you use this code in your research, please cite:
 
-> **Using imprecise probabilities in decision trees for Big Data problems** > *Javier G. Castellano, Maria Isabel A. Benítez, Serafín Moral García, Carlos J Mantas, Joaquín Abellán Mulero* > (To be Published)
+> **Using imprecise probabilities in decision trees for Big Data problems**(2026) 
+> *Javier G. Castellano, Maria Isabel A. Benítez, Serafín Moral García, Carlos J Mantas, Joaquín Abellán Mulero* 
+> (To be Published)
 
 ## ⚙️ Requirements
 
@@ -100,7 +102,5 @@ val predictions = model.transform(testData)
 ## License
 
 This project is licensed under the **Apache License 2.0**, the same license used by the Apache Spark project. See the header of the source files for more details.
-
-```
 
 
