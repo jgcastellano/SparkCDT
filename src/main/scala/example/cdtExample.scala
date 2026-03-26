@@ -23,7 +23,6 @@ import org.apache.spark.ml.classification.CredalDecisionTreeClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.mllib.tree.impurity.{IDMParameter, EContaminationParameter}
 
 object cdtExample {
   def main(arg: Array[String]): Unit = {
@@ -56,30 +55,31 @@ object cdtExample {
     println("----------------------------------------------------------------------------")
 
     // Read the training dataset
-    val dfTra = spark.read
+    var dfTra = spark.read
       .format("csv")
       .option("inferSchema", value = true)
       .option("header", value = false)
       .load(ftrain)
 
     // Read the test dataset
-    val dfTst = spark.read
+    var dfTst = spark.read
       .format("csv")
       .option("inferSchema", value = true)
       .option("header", value = false)
       .load(ftest)
 
-    // Identify feature columns (all except the first one _c0, which is the label)
-    val featureCols = dfTra.columns.filter(_ != "_c0")
+    //Identify the class column and cast it to an integer value
+    dfTra=dfTra.withColumn("label",dfTra("_c18").cast("Integer"))
+    dfTst=dfTst.withColumn("label",dfTst("_c18").cast("Integer"))
 
-    // Use VectorAssembler to combine all features into a single vector column
+    //Buil a transform to pack the features attributes into a single vector
     val assembler = new VectorAssembler()
-      .setInputCols(featureCols)
+      .setInputCols(dfTra.columns.slice(0,dfTra.columns.length-2) )
       .setOutputCol("features")
 
     // Prepare the evaluator to measure Accuracy
     val evaluator = new MulticlassClassificationEvaluator()
-      .setLabelCol("_c0")          
+      .setLabelCol("label")          
       .setPredictionCol("prediction") 
       .setMetricName("accuracy")
 
@@ -87,8 +87,8 @@ object cdtExample {
     // 1. CLASSIC DECISION TREE: GINI
     // ---------------------------------------------------------
     val dtGini = new CredalDecisionTreeClassifier()
-      .setCredalImpurity("gini")
-      .setMaxDepth(20)
+      .setImpurity("gini")
+      .setMaxDepth(10)
 
     val pipelineGini = new Pipeline().setStages(Array(assembler, dtGini))
     val modelGini = pipelineGini.fit(dfTra)
@@ -100,8 +100,8 @@ object cdtExample {
     // 2. CLASSIC DECISION TREE: ENTROPY
     // ---------------------------------------------------------
     val dtEntropy = new CredalDecisionTreeClassifier()
-      .setCredalImpurity("entropy")
-      .setMaxDepth(20)
+      .setImpurity("entropy")
+      .setMaxDepth(10)
 
     val pipelineEntropy = new Pipeline().setStages(Array(assembler, dtEntropy))
     val modelEntropy = pipelineEntropy.fit(dfTra)
@@ -113,8 +113,8 @@ object cdtExample {
     // 3. CREDAL DECISION TREE: NPI
     // ---------------------------------------------------------
     val dtNPI = new CredalDecisionTreeClassifier()
-      .setCredalImpurity("npi")
-      .setMaxDepth(20)
+      .setImpurity("npi")
+      .setMaxDepth(10)
 
     val pipelineNPI = new Pipeline().setStages(Array(assembler, dtNPI))
     val modelNPI = pipelineNPI.fit(dfTra)
@@ -125,34 +125,16 @@ object cdtExample {
     // ---------------------------------------------------------
     // 4. CREDAL DECISION TREE: IDM
     // ---------------------------------------------------------
-    // Configure the 's' hyperparameter before training
-    IDMParameter.setS(1.0)
-
     val dtIDM = new CredalDecisionTreeClassifier()
-      .setCredalImpurity("idm")
-      .setMaxDepth(20)
+      .setImpurity("idm")
+      .setS(1.0)
+      .setMaxDepth(10)
 
     val pipelineIDM = new Pipeline().setStages(Array(assembler, dtIDM))
     val modelIDM = pipelineIDM.fit(dfTra)
     val predIDM = modelIDM.transform(dfTst)
 
-    println(s"DT (IDM s=${IDMParameter.getS}) Accuracy:          ${evaluator.evaluate(predIDM)}")
-
-    // ---------------------------------------------------------
-    // 5. CREDAL DECISION TREE: E-Contamination
-    // ---------------------------------------------------------
-    // Configure the 'epsilon' hyperparameter before training
-    EContaminationParameter.setE(0.15)
-
-    val dtECDT = new CredalDecisionTreeClassifier()
-      .setCredalImpurity("econtamination")
-      .setMaxDepth(20)
-
-    val pipelineECDT = new Pipeline().setStages(Array(assembler, dtECDT))
-    val modelECDT = pipelineECDT.fit(dfTra)
-    val predECDT = modelECDT.transform(dfTst)
-
-    println(s"DT (E-Cont e=${EContaminationParameter.getE}) Accuracy:       ${evaluator.evaluate(predECDT)}")
+    println(s"DT (IDM s=1.0) Accuracy:          ${evaluator.evaluate(predIDM)}")
     
     println("----------------------------------------------------------------------------")
     

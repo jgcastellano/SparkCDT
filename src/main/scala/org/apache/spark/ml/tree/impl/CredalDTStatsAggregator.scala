@@ -26,8 +26,9 @@ import org.apache.spark.mllib.tree.impurity._
  * This holds a flat array of statistics for a set of (features, bins)
  * and helps with indexing.
  * This class is abstract to support learning with and without feature subsampling.
+ * Note: This class is a variation to use with credal impurities, so it uses CredalDTStatsAggregator instead of DTStatsAggregator.
  */
-private[spark] class DTStatsAggregator(
+private[spark] class CredalDTStatsAggregator(
     val metadata: DecisionTreeMetadata,
     featureSubset: Option[Array[Int]]) extends Serializable {
 
@@ -35,11 +36,9 @@ private[spark] class DTStatsAggregator(
    * [[ImpurityAggregator]] instance specifying the impurity type.
    */
   val impurityAggregator: ImpurityAggregator = metadata.impurity match {
+    case ci: CredalImpurity => new CredalImpurityAggregator(ci, metadata.numClasses) // <--- YOUR LINE
     case Gini => new GiniAggregator(metadata.numClasses)
     case Entropy => new EntropyAggregator(metadata.numClasses)
-    case NPI => new NPIAggregator(metadata.numClasses)
-    case IDM => new IDMAggregator(metadata.numClasses)
-    case EContamination => new EContaminationAggregator(metadata.numClasses)
     case Variance => new VarianceAggregator()
     case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
   }
@@ -81,7 +80,7 @@ private[spark] class DTStatsAggregator(
 
   /**
    * Array of parent node sufficient stats.
-   * Note: parent stats need to be explicitly tracked in the [[DTStatsAggregator]] for unordered
+   * Note: parent stats need to be explicitly tracked in the [[CredalDTStatsAggregator]] for unordered
    *       categorical features, because the parent [[Node]] object does not have [[ImpurityStats]]
    *       on the first iteration.
    */
@@ -164,9 +163,9 @@ private[spark] class DTStatsAggregator(
    * Merge this aggregator with another, and returns this aggregator.
    * This method modifies this aggregator in-place.
    */
-  def merge(other: DTStatsAggregator): DTStatsAggregator = {
+  def merge(other: CredalDTStatsAggregator): CredalDTStatsAggregator = {
     require(allStatsSize == other.allStatsSize,
-      s"DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
+      s"CredalDTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
         + s" This aggregator is of length $allStatsSize, but the other is ${other.allStatsSize}.")
     var i = 0
     // TODO: Test BLAS.axpy
@@ -176,7 +175,7 @@ private[spark] class DTStatsAggregator(
     }
 
     require(statsSize == other.statsSize,
-      s"DTStatsAggregator.merge requires that both aggregators have the same length parent " +
+      s"CredalDTStatsAggregator.merge requires that both aggregators have the same length parent " +
         s"stats vectors. This aggregator's parent stats are length $statsSize, " +
         s"but the other is ${other.statsSize}.")
     var j = 0
