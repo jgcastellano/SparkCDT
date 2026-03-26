@@ -12,6 +12,6 @@ hs_err_pid*
 src/main/scala/experiments
 
 
-# generated directories, ndo not upload
+# generated directories, do not upload
 project/
 target/
