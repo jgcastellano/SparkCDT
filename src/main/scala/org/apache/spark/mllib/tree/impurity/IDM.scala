@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Since
 class IDM(val s: Double) extends CredalImpurity {
 
   override def name: String = "idm"
-  
+
   /**
    * Impurity calculation for multiclass classification.
    * Based on the optimized implementations `calculateS1` and `calculateCountsS`.
@@ -88,18 +88,18 @@ class IDM(val s: Double) extends CredalImpurity {
    */
   private def calculateCountsS(counts: Array[Double], currentS: Double): Array[Double] = {
     val (minIndexes, _) = getMinIndexes(counts)
-    
+
     var massToDistribute = currentS
     if (currentS > minIndexes.length) {
       massToDistribute = minIndexes.length.toDouble
     }
-    
+
     val newCounts = Array.fill(counts.length)(0.0)
     var classIndex = 0
     while (classIndex < counts.length) {
       val classCount = counts(classIndex)
       if (minIndexes.contains(classIndex)) {
-        newCounts(classIndex) = classCount + massToDistribute
+        newCounts(classIndex) = classCount + ( massToDistribute / minIndexes.length )
       } else {
         newCounts(classIndex) = classCount
       }
