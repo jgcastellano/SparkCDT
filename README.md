@@ -47,18 +47,13 @@ Run the example using the following command from the root of the project:
 
 ```
 
-To compare the NPI-M and A-NPI-M decision trees on the same SUSY training and test data, run with
-Java 21 (Spark 4.1.1's Hadoop dependency is not compatible with Java 25):
+To compare the NPI-M and A-NPI-M decision trees on the same SUSY training and test data, run:
 
 ```bash
-export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-export PATH="$JAVA_HOME/bin:$PATH"
 sbt "runMain example.npiAnpiComparisonExample"
 ```
 
-The example reports each model's test accuracy and the fraction of test rows on which their
-predictions agree. These are empirical results for the selected dataset and tree configuration.
-If Java 21 is installed in a different location, set `JAVA_HOME` to that JDK's path.
+
 
 ## Usage 2: Integrating CDTs into your own Scala code
 
