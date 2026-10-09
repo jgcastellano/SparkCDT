@@ -27,7 +27,7 @@ object CredalStrategy {
 
   /**
   * Creates a `Strategy` instance configured for credal classification.
-  * @param impurity Impurity object (IDM, NPI or EContamination).
+  * @param impurity Impurity object (IDM, NPI, ANPI or EContamination).
   * @param maxDepth Maximum tree depth.
   * @param numClasses Number of classes for the problem.
   * @param maxBins Maximum number of bins for discretization.

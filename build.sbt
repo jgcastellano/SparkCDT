@@ -11,5 +11,6 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-sql" % sparkVersion)
 
 
-//to run an exmaple:
+
+//to run an example:
 //sbt "runMain example.cdtExample"  

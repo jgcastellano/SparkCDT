@@ -69,7 +69,7 @@ class CredalDecisionTreeClassifier @Since("1.4.0") (
   setDefault(epsilon -> 0.2)
 
   // Create a custom parameter to avoid conflicting with Spark's strict "impurity" validator
-  val credalImpurityStr = new Param[String](this, "credalImpurityStr", "Credal Impurity (idm, npi, econt)")
+  val credalImpurityStr = new Param[String](this, "credalImpurityStr", "Credal Impurity (idm, npi, anpi, econt)")
   def getCredalImpurityStr: String = $(credalImpurityStr)
   setDefault(credalImpurityStr -> "idm")
   // --- END CREDAL MODIFICATION ---
@@ -119,7 +119,7 @@ class CredalDecisionTreeClassifier @Since("1.4.0") (
   @Since("1.4.0")
   def setImpurity(value: String): this.type = {
     // --- BEGIN CREDAL MODIFICATION: Bypass the validator ---
-    val supported = Set("gini", "entropy", "idm", "npi", "econt")
+    val supported = Set("gini", "entropy", "idm", "npi", "anpi", "econt")
     require(supported.contains(value.toLowerCase), s"Impurity $value not supported.")
     set(credalImpurityStr, value.toLowerCase)
     // If it is a classical impurity, set the native parameter
@@ -168,6 +168,7 @@ class CredalDecisionTreeClassifier @Since("1.4.0") (
     val impurityObj: Impurity = $(credalImpurityStr) match {
       case "idm"   => new IDM($(s))
       case "npi"   => NPI.asInstanceOf[Impurity]
+      case "anpi"  => ANPI.asInstanceOf[Impurity]
       case "econt" => new EContamination($(epsilon))
       case "gini"  => Gini
       case "entropy" => Entropy
@@ -218,7 +219,7 @@ class CredalDecisionTreeClassifier @Since("1.4.0") (
 object CredalDecisionTreeClassifier extends DefaultParamsReadable[CredalDecisionTreeClassifier] {
   /** Accessor for supported impurities: entropy, gini */
   @Since("1.4.0")
-  final val supportedImpurities: Array[String] = Array("gini", "entropy", "idm", "npi", "econt")
+  final val supportedImpurities: Array[String] = Array("gini", "entropy", "idm", "npi", "anpi", "econt")
 
   @Since("2.0.0")
   override def load(path: String): CredalDecisionTreeClassifier = super.load(path)

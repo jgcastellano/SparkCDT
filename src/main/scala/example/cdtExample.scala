@@ -110,17 +110,17 @@ object cdtExample {
     println(s"DT (Entropy) Accuracy:         ${evaluator.evaluate(predEntropy)}")
 
     // ---------------------------------------------------------
-    // 3. CREDAL DECISION TREE: NPI
+    // 3. CREDAL DECISION TREE: ANPI
     // ---------------------------------------------------------
-    val dtNPI = new CredalDecisionTreeClassifier()
-      .setImpurity("npi")
+    val dtANPI = new CredalDecisionTreeClassifier()
+      .setImpurity("anpi")
       .setMaxDepth(10)
 
-    val pipelineNPI = new Pipeline().setStages(Array(assembler, dtNPI))
-    val modelNPI = pipelineNPI.fit(dfTra)
-    val predNPI = modelNPI.transform(dfTst)
+    val pipelineANPI = new Pipeline().setStages(Array(assembler, dtANPI))
+    val modelANPI = pipelineANPI.fit(dfTra)
+    val predANPI = modelANPI.transform(dfTst)
 
-    println(s"DT (NPI) Accuracy:             ${evaluator.evaluate(predNPI)}")
+    println(s"DT (A-NPI) Accuracy:            ${evaluator.evaluate(predANPI)}")
 
     // ---------------------------------------------------------
     // 4. CREDAL DECISION TREE: IDM

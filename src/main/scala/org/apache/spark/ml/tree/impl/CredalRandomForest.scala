@@ -83,7 +83,7 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
  * the heaviest part of the computation.  In general, this implementation is bound by either
  * the cost of statistics computation on workers or by communicating the sufficient statistics.
  *
- * Note: This implementation is created to use other impurities: IDM, NPI, EContamination.
+ * Note: This implementation is created to use other impurities: IDM, NPI, ANPI, EContamination.
  * In addition to the impurities already implemented in Apache Spark: entropy and gini */
 private[spark] object CredalRandomForest extends Logging with Serializable {
 

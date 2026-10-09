@@ -4,9 +4,10 @@ An extension for Apache Spark MLlib that implements **Credal Decision Trees (CDT
 
 Standard decision trees in Spark use classical impurity measures (like Gini or Entropy). This project extends Spark's internal tree architecture to support imprecise probabilities, offering greater robustness when dealing with noise, missing data, or high uncertainty. By using **Package Membership**, this implementation integrates directly into the `org.apache.spark` namespace, allowing seamless access to Spark's private APIs and optimized communication between the Driver and Executors without the need for complex ClassLoader configurations.
 
-This repository implements two credal impurity criteria:
+This repository implements three credal impurity criteria:
 1. **IDM** (Imprecise Dirichlet Model)
-2. **NPI** (Nonparametric Predictive Inference)
+2. **NPI** (exact NPI-M for multinomial data)
+3. **ANPI** (approximate NPI-M for multinomial data)
 
 ## Citation
 
@@ -46,6 +47,19 @@ Run the example using the following command from the root of the project:
 
 ```
 
+To compare the NPI-M and A-NPI-M decision trees on the same SUSY training and test data, run with
+Java 21 (Spark 4.1.1's Hadoop dependency is not compatible with Java 25):
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export PATH="$JAVA_HOME/bin:$PATH"
+sbt "runMain example.npiAnpiComparisonExample"
+```
+
+The example reports each model's test accuracy and the fraction of test rows on which their
+predictions agree. These are empirical results for the selected dataset and tree configuration.
+If Java 21 is installed in a different location, set `JAVA_HOME` to that JDK's path.
+
 ## Usage 2: Integrating CDTs into your own Scala code
 
 If you want to use the `CredalDecisionTreeClassifier` in your own Spark ML pipelines, it acts as a drop-in replacement for Spark's standard `DecisionTreeClassifier`.
@@ -63,7 +77,7 @@ Hyperparameters like **s** (IDM) are managed directly through the Estimator's AP
 ```scala
 // Create the CDT Classifier
 val cdt = new CredalDecisionTreeClassifier()
-  .setImpurity("idm")      // Options: "idm", "npi", "gini", "entropy"
+  .setImpurity("idm")      // Options: "idm", "npi", "anpi", "gini", "entropy"
   .setS(1.0)               // Specific for IDM (default is 1.0)
   .setMaxDepth(10)
   .setLabelCol("label")

@@ -17,178 +17,183 @@
 package org.apache.spark.mllib.tree.impurity
 
 import org.apache.spark.annotation.Since
-import scala.collection.mutable.ArrayBuffer
 
 /**
- * Object to compute imprecise entropy based on the NPI-M model.
- * Based on: Abellán, J., Baker, R. M., & Coolen, F. P. (2011).
- * "Maximising entropy on the nonparametric predictive inference model for multinomial data".
+ * Object to compute imprecise entropy using the exact NPI-M algorithm for
+ * multinomial data.
+ * Based on: Abellán, J., Baker, R. M., & Coolen, F. P. A. (2011).
+ * "Maximising entropy on the nonparametric predictive inference model for
+ * multinomial data". European Journal of Operational Research, 212(1), 112–122.
+ * https://doi.org/10.1016/j.ejor.2011.01.020
  */
 @Since("1.0.0")
 object NPI extends CredalImpurity {
 
   override def name: String = "npi"
 
-  private val MINDIFF = 0.00001
-
   /**
-   * Entry point for impurity calculation in Spark.
+   * Calculates Shannon entropy of the maximum-entropy NPI-M distribution.
+   * NPI-M is defined for multinomial frequency counts, so counts must be
+   * non-negative integers.
    * @param counts Array with the counts for each label.
    * @param totalCount Total sum of the counts.
    */
   override def calculate(counts: Array[Double], totalCount: Double): Double = {
-    if (totalCount == 0) {
+    if (totalCount == 0.0) {
       return 0.0
     }
 
-    // NPI transformation to obtain the maximum-entropy distribution
-    val pmax = npiTransformation(counts, totalCount)
+    val pmax = maximumEntropyDistribution(counts, totalCount)
+    entropy(pmax)
+  }
 
-    // Shannon entropy calculation over the pmax distribution
+  /**
+   * Computes the exact NPI-M maximum-entropy distribution used by `calculate`.
+   * Package visibility is provided so tests can validate the distribution itself.
+   */
+  private[impurity] def maximumEntropyDistribution(
+      counts: Array[Double], totalCount: Double): Array[Double] = {
+    require(counts.nonEmpty, "NPI requires at least one class when totalCount is positive.")
+    require(counts.forall(c => c >= 0.0 && c.isFinite),
+      "NPI requires finite, non-negative integer class counts.")
+    require(counts.forall(c => c == math.rint(c)),
+      "NPI-M is defined for integer multinomial counts; fractional counts are not supported.")
+    require(totalCount.isFinite && totalCount > 0.0,
+      "NPI requires a finite, positive totalCount.")
+    require(math.abs(counts.sum - totalCount) <= 1e-8 * math.max(1.0, totalCount),
+      "NPI requires totalCount to equal the sum of class counts.")
+    require(counts.forall(_ <= Int.MaxValue.toDouble),
+      "NPI class counts exceed the supported integer range.")
+
+    // Compute variables used by the exact Max NPI-M algorithm.
+    val k = counts.length
+    val n = totalCount
+    val integerCounts = counts.map(_.toInt)
+    val maxCount = integerCounts.max
+
+    // K(i) is the number of classes with frequency i. Keep one trailing
+    // zero entry so the K(i + 1) access at the maximum frequency is safe.
+    val K = new Array[Int](maxCount + 2)
+    integerCounts.foreach { count => K(count) += 1 }
+    val Kprime = integerCounts.count(_ > 1)
+    val pmax = new Array[Double](k)
+
+    // CASE K' == 0: all observed frequencies are 0 or 1.
+    if (Kprime == 0) {
+      java.util.Arrays.fill(pmax, 1.0 / k)
+    } else if (K(0) > Kprime) {
+      val numerator = K(0) + K(1)
+      val denominator = Kprime + K(1)
+      val beta = numerator / denominator
+      val h = numerator % denominator
+      val indexes = integerCounts.zipWithIndex.sortBy(_._1).map(_._2)
+
+      if (h < K(1) + 1) {
+        var j = 0
+        val firstGroupEnd = beta * (K(1) + 1) + h
+        while (j < firstGroupEnd) {
+          pmax(indexes(j)) = (K(1) + 1).toDouble / (n * firstGroupEnd)
+          j += 1
+        }
+        while (j < numerator) {
+          pmax(indexes(j)) = 1.0 / (n * beta)
+          j += 1
+        }
+        while (j < k) {
+          pmax(indexes(j)) = (integerCounts(indexes(j)) - 1.0) / n
+          j += 1
+        }
+      } else {
+        var j = 0
+        val firstGroupEnd = h * (beta + 1)
+        while (j < firstGroupEnd) {
+          pmax(indexes(j)) = 1.0 / (n * (beta + 1))
+          j += 1
+        }
+        while (j < numerator) {
+          pmax(indexes(j)) = 1.0 / (n * beta)
+          j += 1
+        }
+        while (j < k) {
+          pmax(indexes(j)) = (integerCounts(indexes(j)) - 1.0) / n
+          j += 1
+        }
+      }
+    } else {
+      // CASE K(0) <= K': distribute the remaining mass over adjacent
+      // frequency groups, as specified by the exact NPI-M algorithm.
+      var mass = Kprime - K(0)
+      var j = 0
+      while (j < k) {
+        if (integerCounts(j) <= 1) pmax(j) = 1.0 / n
+        else pmax(j) = (integerCounts(j) - 1.0) / n
+        j += 1
+      }
+
+      var i = 1
+      while (mass > 0) {
+        val groupSize = K(i) + K(i + 1)
+        if (groupSize < mass) {
+          j = 0
+          while (j < k) {
+            if (integerCounts(j) == i || integerCounts(j) == i + 1) {
+              pmax(j) += 1.0 / n
+              mass -= 1
+            }
+            j += 1
+          }
+        } else {
+          val groupCount = math.min(mass + 1 + K(i), groupSize)
+          var remaining = groupCount
+          val indexes = integerCounts.zipWithIndex.sortBy(_._1).map(_._2)
+          j = 0
+          while (j < k && remaining > 0) {
+            val count = integerCounts(indexes(j))
+            if (count == i || count == i + 1) {
+              pmax(indexes(j)) += mass.toDouble / (n * groupCount)
+              remaining -= 1
+            }
+            j += 1
+          }
+          mass = 0
+        }
+        i += 1
+      }
+    }
+
+    pmax
+  }
+
+  /** Singleton lower and upper probabilities under the NPI-M model. */
+  private[impurity] def singletonBounds(
+      counts: Array[Double], totalCount: Double): (Array[Double], Array[Double]) = {
+    require(counts.nonEmpty, "NPI requires at least one class.")
+    require(totalCount.isFinite && totalCount > 0.0,
+      "NPI singleton bounds require a finite, positive totalCount.")
+    require(counts.forall(c => c >= 0.0 && c.isFinite && c == math.rint(c)),
+      "NPI singleton bounds require finite, non-negative integer class counts.")
+    require(math.abs(counts.sum - totalCount) <= 1e-8 * math.max(1.0, totalCount),
+      "NPI requires totalCount to equal the sum of class counts.")
+
+    val lower = counts.map(count => math.max(0.0, (count - 1.0) / totalCount))
+    val upper = counts.map(count => math.min(1.0, (count + 1.0) / totalCount))
+    (lower, upper)
+  }
+
+  private def entropy(probabilities: Array[Double]): Double = {
     var impurity = 0.0
     var j = 0
-    while (j < pmax.length) {
-      if (pmax(j) > 0) {
-        impurity -= pmax(j) * scala.math.log(pmax(j))
+    while (j < probabilities.length) {
+      if (probabilities(j) > 0.0) {
+        impurity -= probabilities(j) * scala.math.log(probabilities(j))
       }
       j += 1
     }
     impurity
   }
 
-  /**
-   * Computes probability intervals [pl, pu] and searches for the distribution
-   * that maximizes entropy.
-   */
-  private def npiTransformation(array: Array[Double], sum: Double): Array[Double] = {
-    val n = array.length
-    val pl = new Array[Double](n)
-    val pu = new Array[Double](n)
-    
-    // Generate NPI intervals: [max(0, (count-1)/sum), min(1, (count+1)/sum)]
-    var i = 0
-    while (i < n) {
-      pl(i) = math.max(0.0, (array(i) - 1.0) / sum)
-      pu(i) = math.min(1.0, (array(i) + 1.0) / sum)
-      i += 1
-    }
-    
-    val indexes = ArrayBuffer.range(0, n)
-    maxEntropy(pl, pu, indexes)
-  }
-
-  /**
-   * Recursive algorithm to find the entropy maximum in a credal set
-   * defined by intervals (Abellán and Moral, 2003).
-   */
-  private def maxEntropy(pl: Array[Double], pu: Array[Double], 
-                         indexes: ArrayBuffer[Int]): Array[Double] = {
-    
-    val sumPl = pl.sum
-    
-    // Base case: the sum of probabilities is (almost) 1
-    if (math.abs(1.0 - sumPl) < 0.001) {
-      return pl.clone()
-    }
-    
-    // Remove indices where there is no margin for increase (pl == pu)
-    var i = 0
-    while (i < indexes.length) {
-      if (math.abs(pl(indexes(i)) - pu(indexes(i))) < MINDIFF) {
-        indexes.remove(i)
-      } else {
-        i += 1
-      }
-    }
-    
-    if (indexes.isEmpty) {
-      return pl.clone()
-    }
-    
-    // Logic to search for minimal indices and distribute remaining mass
-    val men = minIndex(pl, indexes)
-    val sig = sigIndex(pl, men, indexes)
-    val nme = nMin(pl, men, indexes)
-    val minVal = pl(men)
-    
-    i = 0
-    while (i < pl.length) {
-      if (math.abs(pl(i) - minVal) < MINDIFF) {
-        if (sig != men) {
-          pl(i) = pl(i) + math.min(
-            math.min(pu(i) - pl(i), pl(sig) - minVal),
-            (1.0 - sumPl) / nme
-          )
-        } else {
-          pl(i) = pl(i) + math.min(
-            math.min(pu(i) - pl(i), (1.0 - sumPl) / nme),
-            1.0
-          )
-        }
-      }
-      i += 1
-    }
-    
-    maxEntropy(pl, pu, indexes)
-  }
-  
-  // Technical helpers for index search
-  private def minIndex(p: Array[Double], indexes: ArrayBuffer[Int]): Int = {
-    var min = Double.MaxValue
-    var index = -1
-    for (i <- indexes) {
-      if (p(i) < min) {
-        min = p(i)
-        index = i
-      }
-    }
-    index
-  }
-  
-  private def sigIndex(p: Array[Double], indexlowest: Int, 
-                       indexes: ArrayBuffer[Int]): Int = {
-    var minDiffValue = Double.MaxValue
-    var index = indexlowest
-    var found = false
-    
-    for (idx <- indexes) {
-      if (math.abs(p(idx) - p(indexlowest)) > MINDIFF && p(idx) < minDiffValue) {
-        minDiffValue = p(idx)
-        index = idx
-        found = true
-      }
-    }
-    if (found) index else indexlowest
-  }
-  
-  private def nMin(p: Array[Double], indexlowest: Int, 
-                   indexes: ArrayBuffer[Int]): Int = {
-    var count = 0
-    for (i <- indexes) {
-      if (math.abs(p(i) - p(indexlowest)) < MINDIFF) count += 1
-    }
-    count
-  }
-
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("NPI does not support regression.")
 
   def instance: this.type = this
-}
-
-/**
- * Specific calculator for NPI.
- */
-private[spark] class NPICalculator(stats: Array[Double], var rawCount: Long)
-  extends ImpurityCalculator(stats) {
-
-  override def copy: NPICalculator = new NPICalculator(stats.clone(), rawCount)
-  override def calculate(): Double = NPI.calculate(stats, stats.sum)
-  override def count: Double = stats.sum
-  override def predict: Double = if (count == 0) 0 else indexOfLargestArrayElement(stats)
-
-  override def prob(label: Double): Double = {
-    val lbl = label.toInt
-    if (count == 0) 0 else stats(lbl) / count
-  }
 }

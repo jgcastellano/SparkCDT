@@ -31,6 +31,7 @@ object CredalImpurity {
     name.toLowerCase match {
       case "idm"   => new IDM(s)
       case "npi"   => NPI.asInstanceOf[CredalImpurity]
+      case "anpi"  => ANPI.asInstanceOf[CredalImpurity]
       case "econt" | "e-cont" => new EContamination(epsilon)
       case _ => throw new IllegalArgumentException(s"Unknown credal impurity: $name")
     }
@@ -77,7 +78,7 @@ private[spark] class CredalImpurityCalculator(
   override def copy: CredalImpurityCalculator = 
     new CredalImpurityCalculator(impurity, stats.clone(), rawCount)
 
-  // Here we delegate the mathematical calculation to the serialized instance (IDM, NPI, ECont)
+  // Here we delegate the mathematical calculation to the serialized instance (IDM, NPI, ANPI, ECont)
   override def calculate(): Double = {
     if (count == 0) return 0.0
     impurity.calculate(stats, stats.sum)
