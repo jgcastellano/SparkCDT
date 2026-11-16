@@ -13,8 +13,8 @@ This repository implements three credal impurity criteria:
 
 This implementation was developed for the following research paper. If you use this code in your research, please cite:
 
-> **Using imprecise probabilities in decision trees for Big Data problems**(2026) 
-> *Javier G. Castellano, Maria Isabel A. Benítez, Serafín Moral García, Carlos J Mantas, Joaquín Abellán Mulero* 
+> **Using imprecise probabilities in decision trees for Big Data problems** (2026) 
+> *Javier G. Castellano, María Isabel A. Benítez, Serafín Moral-García, Carlos J Mantas, Joaquín Abellán* 
 > (To be Published)
 
 ## Requirements
@@ -34,7 +34,7 @@ sbt clean package
 
 This will generate a JAR file in the `./target/scala-2.13/` folder, for example: `sparkcdt_2.13-1.4.jar`.
 
-## Usage 1: Running the provided example (Spark-Submit)
+## Usage 1: Running the provided examples (Spark-Submit / SBT)
 
 We provide an example class (`example.cdtExample`) that loads a toy dataset and evaluates the different credal impurity measures.
 
@@ -85,7 +85,7 @@ val model = cdt.fit(trainingData)
 val predictions = model.transform(testData)
 
 ```
-### 2. Running with `spark-submit`
+### 3. Running with `spark-submit`
 
 Once you have compiled both your application and the SparkCDT library, use `spark-submit` to execute the job. 
 
